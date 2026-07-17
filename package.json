@@ -1,0 +1,32 @@
+{
+  "name": "create-vanilla-gorilla",
+  "version": "0.1.0",
+  "description": "Scaffold a new static site from the vanilla-gorilla template.",
+  "type": "module",
+  "bin": {
+    "create-vanilla-gorilla": "bin/cli.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test/smoke.js"
+  },
+  "keywords": [
+    "vanilla-gorilla",
+    "scaffold",
+    "cli",
+    "static-site",
+    "create-app",
+    "boilerplate",
+    "starter"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/exhibita/create-vanilla-gorilla.git"
+  },
+  "license": "MIT"
+}
