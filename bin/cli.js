@@ -143,6 +143,8 @@ Next steps:
   ${installCommand()}
   npm run watch
 
+To edit the site from your phone, see Gorilla To Go: https://gorillatogo.app
+
 Happy building.
 `);
 }

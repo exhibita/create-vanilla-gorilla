@@ -35,6 +35,9 @@ withTmpDir('Test Site', (target) => {
 
   const pkg = JSON.parse(fs.readFileSync(path.join(target, 'package.json'), 'utf8'));
   assert.equal(pkg.name, 'test-site', 'package.json name should be slugified');
+  // Gorilla To Go reads vanillaGorilla.templateVersion and needs version 2 or newer.
+  assert.ok(pkg.vanillaGorilla?.templateVersion >= 2, 'the template version marker must be kept');
+  assert.equal(pkg.license, 'AGPL-3.0-or-later', 'the template license must be kept');
 
   const remotes = spawnSync('git', ['remote', '-v'], { cwd: target, encoding: 'utf8' });
   assert.equal(remotes.stdout.trim(), '', 'freshly re-initialized repo should have no remotes');
