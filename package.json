@@ -1,6 +1,6 @@
 {
   "name": "create-vanilla-gorilla",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Scaffold a new static site from the vanilla-gorilla template.",
   "type": "module",
   "bin": {
