@@ -2,12 +2,16 @@
 
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { parseArgs } from 'node:util';
 
-const TEMPLATE_REPO_URL = 'https://github.com/exhibita/vanilla-gorilla.git';
+const TEMPLATE_REPO_URL = process.env.CVG_TEMPLATE_REPO || 'https://github.com/exhibita/vanilla-gorilla.git';
 const TEMPLATE_BRANCH = 'main';
+const THEMES_REPO_URL = process.env.CVG_THEMES_REPO || 'https://github.com/exhibita/vanilla-gorilla-themes.git';
+const THEMES_BRANCH = 'main';
+const MANIFEST_VERSION = 1;
 const CONFIG_COMMENT =
   'WARNING: Do NOT put secrets (passwords, API keys, tokens, access keys) in this file. It is committed to the GitHub repository.';
 const SITE_KEYS = ['siteUrl', 'siteTitle', 'siteDescription'];
@@ -22,12 +26,14 @@ Options:
   --site-url <url>            The address of the live site
   --site-title <text>         The title of the site
   --site-description <text>   A short description of the site
+  --theme <name>              A theme from https://github.com/exhibita/vanilla-gorilla-themes
 
 In a terminal, the command asks for each value that you do not give.
 The values go in config.json. The RSS feed and the sitemap use them.
 
-Example:
+Examples:
   npx create-vanilla-gorilla my-site --site-url https://me.github.io/my-site
+  npx create-vanilla-gorilla my-site --theme maison
 `;
 
 function fail(message, code = 1) {
@@ -115,11 +121,110 @@ function reinitGit(targetDir) {
   spawnSync('git', ['init', '--initial-branch=main'], { cwd: targetDir });
 }
 
-function renamePackageJson(targetDir) {
+// Remove the project folder after a failure. Keep a folder that existed before, but empty it.
+function removeProject(targetDir, preExisted) {
+  if (!preExisted) {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    return;
+  }
+  for (const entry of fs.readdirSync(targetDir)) {
+    fs.rmSync(path.join(targetDir, entry), { recursive: true, force: true });
+  }
+}
+
+// Clone the themes repository into a temporary folder. The folder is removed when the process exits.
+function fetchThemes() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cvg-themes-'));
+  process.on('exit', () => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const result = spawnSync(
+    'git',
+    ['clone', '--depth', '1', '--branch', THEMES_BRANCH, THEMES_REPO_URL, dir],
+    { stdio: 'inherit' }
+  );
+  if (result.error || result.status !== 0) return null;
+
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(path.join(dir, 'themes.json'), 'utf8'));
+  } catch {
+    fail(`could not read themes.json in ${THEMES_REPO_URL}.`);
+  }
+  if (manifest.manifestVersion > MANIFEST_VERSION) {
+    fail(
+      'the themes repository needs a newer create-vanilla-gorilla. Update it with: npx create-vanilla-gorilla@latest'
+    );
+  }
+  return { dir, manifest };
+}
+
+function themeNames(manifest) {
+  return manifest.themes.map((theme) => theme.name).join(', ');
+}
+
+// Returns the chosen theme, or null for the default theme.
+async function askTheme(manifest) {
+  const nameWidth = Math.max(...manifest.themes.map((theme) => theme.name.length));
+  const typeWidth = Math.max(...manifest.themes.map((theme) => theme.type.length));
+  console.log('\nThemes (previews: https://github.com/exhibita/vanilla-gorilla-themes):');
+  for (const theme of manifest.themes) {
+    console.log(`  ${theme.name.padEnd(nameWidth)}  ${theme.type.padEnd(typeWidth)}  ${theme.description}`);
+  }
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    for (;;) {
+      const answer = (await rl.question('Theme [default]: ')).trim();
+      if (!answer || answer === 'default') return null;
+      const theme = manifest.themes.find((item) => item.name === answer);
+      if (theme) return theme;
+      console.log(`Enter one of these names, or press Enter for the default theme: ${themeNames(manifest)}.`);
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+// Returns the resolved path, or null if it is the root or outside it.
+function resolveInside(root, relativePath) {
+  const resolved = path.resolve(root, relativePath);
+  const relative = path.relative(root, resolved);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    return null;
+  }
+  return resolved;
+}
+
+function applyTheme(targetDir, themesDir, manifest, theme) {
+  const pkg = JSON.parse(fs.readFileSync(path.join(targetDir, 'package.json'), 'utf8'));
+  const templateVersion = pkg.vanillaGorilla?.templateVersion ?? 0;
+  if (templateVersion < theme.minTemplateVersion) {
+    fail(
+      `the theme "${theme.name}" needs template version ${theme.minTemplateVersion} or newer. The template is version ${templateVersion}.`
+    );
+  }
+
+  const srcDir = path.join(targetDir, 'src');
+  const replacePaths = manifest.replaces.map((entry) => {
+    const resolved = resolveInside(srcDir, entry);
+    if (!resolved) fail(`themes.json has a "replaces" path outside src/: ${entry}`);
+    return resolved;
+  });
+  const themePath = resolveInside(themesDir, theme.path);
+  if (!themePath) fail(`themes.json has a theme path outside the themes repository: ${theme.path}`);
+
+  for (const replacePath of replacePaths) {
+    fs.rmSync(replacePath, { recursive: true, force: true });
+  }
+  fs.cpSync(themePath, srcDir, { recursive: true });
+}
+
+function renamePackageJson(targetDir, themeName) {
   const pkgPath = path.join(targetDir, 'package.json');
   try {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
     pkg.name = slugify(path.basename(targetDir));
+    if (themeName) pkg.vanillaGorilla = { ...pkg.vanillaGorilla, theme: themeName };
     fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
   } catch {
     console.warn(
@@ -138,6 +243,7 @@ function parseCliArgs(argv) {
         'site-url': { type: 'string' },
         'site-title': { type: 'string' },
         'site-description': { type: 'string' },
+        theme: { type: 'string' },
       },
     });
   } catch (err) {
@@ -234,6 +340,9 @@ async function main() {
     site.siteUrl = normalizeSiteUrl(flags['site-url']);
     if (!site.siteUrl) fail('--site-url must be a full address that starts with https:// or http://.');
   }
+  if (flags.theme !== undefined && !/^[a-z0-9-]+$/.test(flags.theme)) {
+    fail('--theme must contain only lower-case letters, digits and hyphens.');
+  }
 
   const rawArg = await resolveRawArg(positionals);
   const targetDir = path.resolve(process.cwd(), rawArg);
@@ -241,9 +350,30 @@ async function main() {
   checkGitAvailable();
   checkTargetDir(targetDir);
   if (process.stdin.isTTY) await askSiteConfig(targetDir, site);
-  cloneTemplate(targetDir);
+
+  let themes = null;
+  let theme = null;
+  if (flags.theme !== undefined) {
+    themes = fetchThemes();
+    if (!themes) fail(`could not clone the themes repository ${THEMES_REPO_URL}. See output above.`);
+    theme = themes.manifest.themes.find((item) => item.name === flags.theme);
+    if (!theme) fail(`there is no theme "${flags.theme}". Available themes: ${themeNames(themes.manifest)}.`);
+  } else if (process.stdin.isTTY) {
+    themes = fetchThemes();
+    if (themes) {
+      theme = await askTheme(themes.manifest);
+    } else {
+      console.warn('Warning: could not clone the themes repository. The site gets the default theme.');
+    }
+  }
+
+  const preExisted = cloneTemplate(targetDir);
+  process.on('exit', (code) => {
+    if (code !== 0) removeProject(targetDir, preExisted);
+  });
+  if (theme) applyTheme(targetDir, themes.dir, themes.manifest, theme);
   reinitGit(targetDir);
-  renamePackageJson(targetDir);
+  renamePackageJson(targetDir, theme?.name);
   writeSiteConfig(targetDir, site);
 
   const displayPath = path.relative(process.cwd(), targetDir) || rawArg;
@@ -251,10 +381,13 @@ async function main() {
   const configNote = unset.length
     ? `\nBefore your first deploy, set ${unset.join(', ')} in config.json.\nUntil you do, the RSS feed and the sitemap use the template's values.\n`
     : '';
+  const themeNote = theme
+    ? `\nTheme: ${theme.title}. The site name, the address and the pictures are demo values. Replace them before your first deploy.\n`
+    : '';
 
   console.log(`
 Success! Created ${slugify(path.basename(targetDir))} at ${targetDir}.
-${configNote}
+${themeNote}${configNote}
 Next steps:
   cd ${displayPath}
   ${installCommand()}
