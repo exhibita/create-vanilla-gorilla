@@ -117,4 +117,59 @@ console.log('smoke: no argument, empty prompt answer exits with usage');
 }
 console.log('  ok');
 
+console.log('smoke: no --theme and no terminal records no theme');
+withTmpDir('no-theme', (target) => {
+  const result = run([target]);
+  assert.equal(result.status, 0, result.stderr);
+  const pkg = JSON.parse(fs.readFileSync(path.join(target, 'package.json'), 'utf8'));
+  assert.ok(!('theme' in pkg.vanillaGorilla), 'a site with the default theme has no theme key');
+});
+console.log('  ok');
+
+console.log('smoke: --theme maison installs the theme');
+withTmpDir('maison-site', (target) => {
+  const result = run([target, '--theme', 'maison']);
+  assert.equal(result.status, 0, result.stderr);
+  const src = path.join(target, 'src');
+  assert.ok(fs.existsSync(path.join(src, 'services', 'index.html')), 'the theme pages should exist');
+  assert.match(fs.readFileSync(path.join(src, 'css', 'style.css'), 'utf8'), /Maison/);
+  assert.ok(!fs.existsSync(path.join(src, 'blog', 'welcome-to-vanilla-gorilla')), 'the template post should be removed');
+  assert.ok(fs.existsSync(path.join(src, 'privacy', 'index.md')), 'the privacy page must be kept');
+  assert.ok(fs.existsSync(path.join(target, 'build.js')), 'build.js must be kept');
+  assert.match(result.stdout, /Theme: Maison\./);
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(target, 'package.json'), 'utf8'));
+  assert.equal(pkg.vanillaGorilla?.theme, 'maison', 'the theme name should be recorded');
+  assert.ok(pkg.vanillaGorilla?.templateVersion >= 2, 'the template version marker must be kept');
+  assert.equal(pkg.license, 'AGPL-3.0-or-later', 'the template license must be kept');
+});
+console.log('  ok');
+
+console.log('smoke: an unknown --theme is refused and lists the available themes');
+withTmpDir('unknown-theme', (target) => {
+  const result = run([target, '--theme', 'no-such-theme']);
+  assert.notEqual(result.status, 0, 'should exit non-zero');
+  assert.match(result.stderr, /maison/);
+  assert.ok(!fs.existsSync(target), 'clone must not have proceeded');
+});
+console.log('  ok');
+
+console.log('smoke: an invalid --theme is refused before the clone');
+withTmpDir('bad-theme', (target) => {
+  const result = run([target, '--theme', '../x']);
+  assert.notEqual(result.status, 0, 'should exit non-zero');
+  assert.match(result.stderr, /--theme must contain only/);
+  assert.ok(!fs.existsSync(target), 'clone must not have proceeded');
+});
+console.log('  ok');
+
+console.log('smoke: --theme into an existing empty directory succeeds');
+withTmpDir('empty-theme-dir', (target) => {
+  fs.mkdirSync(target, { recursive: true });
+  const result = run([target, '--theme', 'maison']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(fs.existsSync(path.join(target, 'src', 'services', 'index.html')));
+});
+console.log('  ok');
+
 console.log('\nAll smoke tests passed.');
