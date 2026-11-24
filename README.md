@@ -6,6 +6,8 @@ Scaffold a new static site from the [vanilla-gorilla](https://github.com/exhibit
 npx create-vanilla-gorilla my-site
 ```
 
+Note that my-site will be the folder name underneath the current folder that you are running the `npx` command in. If, for example, you'd wish to have the initial folder created adjacent to the current folder, use `..\my-site` (or `../my-site` for Linux/Mac). 
+
 ## What it does
 
 1. Asks for your site's address (URL), title and description, and for a theme.
