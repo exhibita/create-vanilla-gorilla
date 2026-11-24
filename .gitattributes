@@ -1,0 +1,2 @@
+# always ensure that we are using Unix line endings when checking out files
+*.js text eol=lf
