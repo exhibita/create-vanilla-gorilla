@@ -72,6 +72,10 @@ The CLI changes only the `name` field and, with a theme, adds the `theme` key. T
 
 [Gorilla To Go](https://gorillatogo.app) is a phone app that edits Vanilla Gorilla sites. It needs template version 2 or newer. To upgrade an older site, see [UPGRADE-v2.md](https://github.com/exhibita/vanilla-gorilla/blob/main/docs/UPGRADE-v2.md) in the template repository.
 
+## Updates
+
+If, after updating this application from the repository, you encounter it continuing to use the OLDER version of create-vanilla-gorilla, from within this directory run `npm link` to make this the current version in the `npx` registry.
+
 ## Requirements
 
 - Node.js 18 or later
