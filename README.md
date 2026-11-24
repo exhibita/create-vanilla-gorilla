@@ -16,7 +16,8 @@ Note that my-site will be the folder name underneath the current folder that you
 4. Strips the template's git history and re-initializes a fresh repo.
 5. Renames the copied `package.json`'s `name` field to match your project.
 6. Writes the site's address, title and description to `config.json`.
-7. Prints next steps.
+7. Asks for theme to apply (default or the themes in [Vanilla Gorilla Themes](../vanilla-gorilla-themes/)
+8. Prints next steps.
 
 No auto-install. This tool's only job is to hand you a clean copy of the template; everything else (the build pipeline, page scaffolding, deploy workflows) is documented in the [template repo](https://github.com/exhibita/vanilla-gorilla)'s own README.
 
@@ -35,7 +36,7 @@ The CLI removes a trailing `/` from the address. The template builds `<siteUrl>/
 You can also give the values as options. The CLI does not ask for a value that you give:
 
 ```bash
-npx create-vanilla-gorilla my-site --site-url https://www.example.com --site-title "My Site" --site-description "A short description."
+npx create-vanilla-gorilla my-site --site-url https://www.example.com --site-title "My Site" --site-description "A short description." --theme field-notes
 ```
 
 Without a terminal (for example in CI), the CLI does not ask. It uses only the options. It then lists the values that you must set in `config.json` before your first deploy.
